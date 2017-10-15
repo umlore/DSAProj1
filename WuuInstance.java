@@ -76,6 +76,10 @@ public class WuuInstance {
 			socket = serverSocket;
 			
 			while (true) {
+
+				try {
+					TimeUnit.SECONDS.sleep(1);
+				} catch (Exception e) { System.out.println(e.getMessage()); }
 				//TODO: Only call when necessary
 				sendMessage();
 				receiveMessages();
@@ -92,7 +96,6 @@ public class WuuInstance {
 
         // create an open ended thread-pool
         // wait for a client to connect
-        System.out.println("AcceptThread: " + acceptThread);
 		try { 
 			
 			if (acceptThread == null) {
@@ -103,6 +106,7 @@ public class WuuInstance {
 			if (acceptThread != null) {
 				if (!acceptThreadActive) {
 					acceptThread = null;
+					acceptConnect();
 				}
 			}
 		}
@@ -118,13 +122,48 @@ public class WuuInstance {
 	public void printHostsAndClients() {
 		System.out.println("Hosts and Clients: ");
 		for (int i = 0; i < hosts.length; i++) {
-			System.out.println("\t  Hosts["+i+"]: " + hosts[i]);
-			System.out.println("\tClients["+i+"]: " + clients[i]);
+			System.out.println("\t  Hosts["+i+"]: " + hosts[i] + "\t\tOutStream: " + outStreams[i]);
+			System.out.println("\tClients["+i+"]: " + clients[i] + "\t\tInStream: " + inStreams[i]);
 		}
 	}
 
-	public void sendMessage() { //TODO:ESU
+	public void sendMessage() { //TODO
 		//printHostsAndClients();
+
+		for (int i = 0; i < outStreams.length; i++) {
+			DataOutputStream s = outStreams[i];
+			if (hosts[i] == null) { continue; }
+			Message message = new Message(getLogDiff(i), tsMatrix, id);
+			byte[] byteMessage = message.toBytes();
+			try {
+				//s.writeInt(byteMessage.length);
+				s.write(byteMessage, 0, byteMessage.length);
+				PrintWriter printWriter = new PrintWriter(new OutputStreamWriter(hosts[i].getOutputStream()));
+				printWriter.print(byteMessage);
+				printWriter.flush();
+			} catch (IOException e) {
+				System.out.println(e.getMessage());
+			}
+		}
+
+		/*
+		for (int i = 0; i < outStreams.length; i++) {
+			//Socket s = outStreams[i];
+			if (outStreams[i] == null) { continue; }
+			Message message = new Message(getLogDiff(i), tsMatrix, id);
+			byte[] byteMessage = message.toBytes();
+			try {
+				outStreams[i].writeInt(byteMessage.length);
+				outStreams[i].write(byteMessage);
+			} catch (IOException e) {
+				System.out.println(e.getMessage());
+			}
+		}
+		*/
+
+		
+		/*
+		
 		try {
 			TimeUnit.SECONDS.sleep(1);
 		} catch (Exception e) { System.out.println(e.getMessage()); }
@@ -143,9 +182,12 @@ public class WuuInstance {
 				System.out.println(e.getMessage());
 			}
 		}
+		*/
 	}
 	
 	public void receiveMessages() {
+		//printHostsAndClients();
+		/*
 		for (int i = 0; i < clients.length; i++) {
 			try {
 				if (clients[i] != null) {
@@ -166,6 +208,7 @@ public class WuuInstance {
 				System.out.println(e.getMessage());
 			}
 		}
+		*/
 	}
 	
 	public void updateMatrix(ArrayList<EventRecord> clientLog, Integer clientid, ArrayList<ArrayList<Integer>> clientMatrix) {
@@ -198,27 +241,29 @@ public class WuuInstance {
 	
 	public void connectTo(String host, Integer hostPort, Integer hostID) {
 		System.out.println("Connecting to host " + host);
+		System.out.println("Hostport: " + hostPort + "\thostID: " + hostID + "\tHostaddress: " + host);
 		try (
 			Socket hostSocket = new Socket(host, hostPort);
 			Socket clientSocket = new Socket();
 		) {
+			System.out.println("\t\t\tHostSocket: " + hostSocket);
 			if (hostSocket != null) {
-				hostSocket.setKeepAlive(true);
 				//PrintWriter sendToHost = new PrintWriter(hostSocket.getOutputStream(), true);
 				//BufferedReader receiveFromHost = new BufferedReader(new InputStreamReader(hostSocket.getInputStream()));
 				//sendToHost.println("Client port " + port + " connected to host " + hostPort + ".");
 				hosts[hostID] = hostSocket;
+				hosts[hostID].setKeepAlive(true);
 				outStreams[hostID] = new DataOutputStream(hosts[hostID].getOutputStream());
 				System.out.println("Connected self to host " + host);
 			}
 			else {
-				System.out.println("Message fell on deaf ears....");
+				System.out.println("Host is null");
 			}
 			
 		} catch (UnknownHostException e) {
 			System.err.println("Don't know about host " + host);
 		} catch (IOException e) {
-			System.out.println("Message fell on deaf ears....");
+			System.out.println(e.getMessage());
 		}
 	}
 	
@@ -233,15 +278,25 @@ public class WuuInstance {
 		
 	    public void run() {
 				try {
-					System.out.println("Waiting to receive: ");
+					//System.out.println("Waiting to receive: ");
 					Socket clientSocket = server.accept();
 					Integer clientID = wu.addressBook.get(clientSocket.getInetAddress().getHostAddress());
 					//System.out.println("clientID: " + clientID);
 					wu.clients[clientID] = clientSocket;
+					wu.clients[clientID].setKeepAlive(true);
 					wu.inStreams[clientID] = new DataInputStream(wu.clients[clientID].getInputStream());
-					System.out.println("Received Connection");
+					//System.out.println("Received Connection");
+
+					//todo: fix this
+					if (wu.hosts[clientID] == null) {
+						System.out.println("\t\t\t\t\t\t\t\tGOT HERE");
+						TimeUnit.SECONDS.sleep(1);
+						wu.connectTo(clientSocket.getInetAddress().getHostAddress() , clientID + 7000, clientID);
+					}
+
+
 					wu.acceptThreadActive = false;
-				} catch (IOException e) {
+				} catch (Exception e) {
 					System.out.println(e.getMessage());
 				}
 	    }

@@ -24,8 +24,8 @@ public class WuuBernstein {
 					wu.id = lineCount;
 					//System.out.println("Will connect to " + clientIP);
 					//Host name, host port
-					
 					wu.connectTo(clientIP.getHostAddress(), hostPort, lineCount);
+
 				}
 				//insert address into addressbook
 				//System.out.println("Map In WuuBernstein: " + addressBook.toString());
