@@ -23,7 +23,7 @@ public class WuuInstance {
 	ArrayList<ArrayList<Integer>> tsMatrix;
 	ArrayList<EventRecord> log;
 
-	Dictionary<Integer, ArrayList<Integer>> blockList;
+	Dictionary<String, ArrayList<String>> blockList;
 
 	Thread acceptThread;
 	Boolean acceptThreadActive;
@@ -109,6 +109,20 @@ public class WuuInstance {
 			System.out.println(e.getMessage());
 		}
 	}
+
+	public void view() {
+		for (int i = 0; i < log.size(); i++) {
+			EventRecord tweet = log.get(i);
+			if (tweet.operation != EventRecord.Operation.TWEET) { continue; }
+			if (blockList.get(tweet.username).contains(username)) {
+				continue;
+			}
+			System.out.println("@" + tweet.username + "\t" + tweet.realtime);
+			System.out.println(tweet.content + "\n");
+			//TODO: Don't view if blocked!
+
+		}
+	}
 	
 	public void acceptConnect() throws IOException {
 
@@ -169,9 +183,11 @@ public class WuuInstance {
 		for (int i = 0; i < message.log.size(); i++) {
 			EventRecord eRMessage = message.log.get(i);
 			if (eRMessage.operation == EventRecord.Operation.BLOCK) {
-				//TODO: map username to proc ID so it can be added to blocklist
+				ArrayList<String> blockedUsers = blockList.get(eRMessage.username);
+				blockedUsers.add(eRMessage.content);
 			} else if (eRMessage.operation == EventRecord.Operation.UNBLOCK) {
-				//TODO: map username to proc ID so it can be unblocked
+				ArrayList<String> blockedUsers = blockList.get(eRMessage.username);
+				blockedUsers.remove(eRMessage.content);
 			}
 		}
 	}
@@ -189,6 +205,7 @@ public class WuuInstance {
 		for (int i = log.size() - 1; i >= 0; i--) {
 			Boolean allHasRec = true;
 			EventRecord eRToTrunc = log.get(i);
+			if (eRToTrunc.operation == EventRecord.Operation.TWEET) { continue; }
 			for (int j = 0; j < tsMatrix.size(); j++) {
 				if (!hasRecord(eRToTrunc, j)) {
 					allHasRec = false;
