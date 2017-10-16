@@ -65,7 +65,28 @@ public class WuuInstance {
 	}
 
 	public Boolean hasRecord(EventRecord eR, int k) {
-		return false;
+		return (eR.timestamp <= tsMatrix.get(k).get(eR.id));
+	}
+
+	public ArrayList<EventRecord> getLogDiff(int proc) { //TODO
+		ArrayList<EventRecord> partialLog =  new ArrayList<EventRecord>();
+		for (int i = 0; i < log.size(); i++) {
+			if (!hasRecord(log.get(i), proc)) {
+				partialLog.add(log.get(i));
+			}
+		}
+		return partialLog;
+	}
+
+	//called whenever a new event is created by the user, will trigger
+	//send message in the case that eventRecord is of type tweet
+	public void createEvent(EventRecord eventRecord) {
+		tsMatrix.get(id).set(id, tsMatrix.get(id).get(id) + 1);
+		log.add(eventRecord);
+
+		if (eventRecord.operation == EventRecord.Operation.TWEET) {
+			sendMessage();
+		}
 	}
 	
 	public void listen() {
@@ -80,8 +101,6 @@ public class WuuInstance {
 				try {
 					TimeUnit.SECONDS.sleep(1);
 				} catch (Exception e) { System.out.println(e.getMessage()); }
-				//TODO: Only call when necessary
-				sendMessage();
 				receiveMessages();
 				acceptConnect();
 			}
@@ -115,10 +134,8 @@ public class WuuInstance {
 		}
 	}
 
-	public ArrayList<EventRecord> getLogDiff(int proc) { //TODO
-		return new ArrayList<EventRecord>();
-	}
-
+	
+	//helper function to display which sockets are null at a given time
 	public void printHostsAndClients() {
 		System.out.println("Hosts and Clients: ");
 		for (int i = 0; i < hosts.length; i++) {
@@ -127,9 +144,10 @@ public class WuuInstance {
 		}
 	}
 
-	public void sendMessage() { //TODO
-		//printHostsAndClients();
-
+	//sends a message to all unblocked sites consisting of the partial log
+	//local to this instance which this doesn't know the receiving
+	//instance knows about
+	public void sendMessage() { 
 		for (int i = 0; i < outStreams.length; i++) {
 			DataOutputStream s = outStreams[i];
 			if (hosts[i] == null) { continue; }
@@ -145,49 +163,46 @@ public class WuuInstance {
 				System.out.println(e.getMessage());
 			}
 		}
+	}
 
-		/*
-		for (int i = 0; i < outStreams.length; i++) {
-			//Socket s = outStreams[i];
-			if (outStreams[i] == null) { continue; }
-			Message message = new Message(getLogDiff(i), tsMatrix, id);
-			byte[] byteMessage = message.toBytes();
-			try {
-				outStreams[i].writeInt(byteMessage.length);
-				outStreams[i].write(byteMessage);
-			} catch (IOException e) {
-				System.out.println(e.getMessage());
+	public void updateBlocklist(Message message) {
+		for (int i = 0; i < message.log.size(); i++) {
+			EventRecord eRMessage = message.log.get(i);
+			if (eRMessage.operation == EventRecord.Operation.BLOCK) {
+				//TODO: map username to proc ID so it can be added to blocklist
+			} else if (eRMessage.operation == EventRecord.Operation.UNBLOCK) {
+				//TODO: map username to proc ID so it can be unblocked
 			}
 		}
-		*/
+	}
 
-		
-		/*
-		
-		try {
-			TimeUnit.SECONDS.sleep(1);
-		} catch (Exception e) { System.out.println(e.getMessage()); }
-		
-
-		for (int i = 0; i < hosts.length; i++) {
-			if (hosts[i] == null) { continue; }
-			Message message = new Message(getLogDiff(i), tsMatrix, id);
-			byte[] byteMessage = message.toBytes();
-			try {
-				outStreams[i].writeInt(byteMessage.length);
-				outStreams[i].write(byteMessage);
-			}
-			catch (IOException e) {
-				//TODO: SOCKET IS CLOSED, CANNOT SEND
-				System.out.println(e.getMessage());
+	public void updateLog(Message message) {
+		for (int i = 0; i < message.log.size(); i++) {
+			EventRecord eRMessage = message.log.get(i);
+			if (!hasRecord(eRMessage, id)) {
+				log.add(eRMessage);
 			}
 		}
-		*/
+	}
+
+	public void truncateLog() {
+		for (int i = log.size() - 1; i >= 0; i--) {
+			Boolean allHasRec = true;
+			EventRecord eRToTrunc = log.get(i);
+			for (int j = 0; j < tsMatrix.size(); j++) {
+				if (!hasRecord(eRToTrunc, j)) {
+					allHasRec = false;
+				}
+			}
+			if (allHasRec) {
+				log.remove(i);
+			}
+		}
 	}
 	
 	public void receiveMessages() {
 		//printHostsAndClients();
-		/*
+		
 		for (int i = 0; i < clients.length; i++) {
 			try {
 				if (clients[i] != null) {
@@ -200,15 +215,20 @@ public class WuuInstance {
 						message.printMessage();
 						updateMatrix(message.log, message.id, message.tsMatrix);
 						//TODO: Do something with message, now that it's received
+						updateBlocklist(message);
+						//add partial log received to the local log of this instance
+						updateLog(message);
 					}
 
 				}
+
+
 			}
 			catch (Exception e) {
 				System.out.println(e.getMessage());
 			}
 		}
-		*/
+		truncateLog();
 	}
 	
 	public void updateMatrix(ArrayList<EventRecord> clientLog, Integer clientid, ArrayList<ArrayList<Integer>> clientMatrix) {
