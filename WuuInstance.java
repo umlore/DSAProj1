@@ -12,10 +12,7 @@ public class WuuInstance {
 
 	HashMap<String, Integer> addressBook;
 
-	Socket[] clients; //sends
-	DataInputStream[] inStreams;
 	Socket[] hosts; //receives
-	DataOutputStream[] outStreams;
 
 	Integer id;
 	String username; 
@@ -36,13 +33,12 @@ public class WuuInstance {
 
 		addressBook = new HashMap<String, Integer>();	
 
-		clients = new Socket[n];
-		inStreams = new DataInputStream[n];
 		hosts = new Socket[n];
-		outStreams = new DataOutputStream[n];
 
 		acceptThread = null;
 		acceptThreadActive = false;
+
+		log = new ArrayList<EventRecord>();
 
 		threadPool = Executors.newCachedThreadPool();
 		listening = false;
@@ -155,31 +151,22 @@ public class WuuInstance {
 		}
 	}
 
-	
-	//helper function to display which sockets are null at a given time
-	public void printHostsAndClients() {
-		System.out.println("Hosts and Clients: ");
-		for (int i = 0; i < hosts.length; i++) {
-			System.out.println("\t  Hosts["+i+"]: " + hosts[i] + "\t\tOutStream: " + outStreams[i]);
-			System.out.println("\tClients["+i+"]: " + clients[i] + "\t\tInStream: " + inStreams[i]);
-		}
-	}
-
 	//sends a message to all unblocked sites consisting of the partial log
 	//local to this instance which this doesn't know the receiving
 	//instance knows about
 	public void sendMessage() { 
-		for (int i = 0; i < outStreams.length; i++) {
-			DataOutputStream s = outStreams[i];
+		for (int i = 0; i < hosts.length; i++) {
 			if (hosts[i] == null) { continue; }
-			//Message message = new Message(getLogDiff(i), tsMatrix, id);
+			Message message = new Message(getLogDiff(i), tsMatrix, id);
+			
+			System.out.println("Message: ");
+			message.printMessage();
 			//byte[] byteMessage = message.toBytes();
 			try {
 				//s.writeInt(byteMessage.length);
 				//s.write(byteMessage, 0, byteMessage.length);
-				PrintWriter printWriter = new PrintWriter(new OutputStreamWriter(hosts[i].getOutputStream()));
-				printWriter.print("Hello friend :)");
-				printWriter.flush();
+				ObjectOutputStream out = new ObjectOutputStream(new BufferedOutputStream(hosts[i].getOutputStream()));
+				out.writeObject(message);
 			} catch (IOException e) {
 				System.out.println(e.getMessage());
 			}
@@ -224,37 +211,6 @@ public class WuuInstance {
 		}
 	}
 	
-	public void receiveMessages() {
-		//printHostsAndClients();
-		
-		for (int i = 0; i < clients.length; i++) {
-			try {
-				if (clients[i] != null) {
-					if (inStreams[i].available() != 0) {
-						int length = inStreams[i].readInt();
-						byte[] byteMessage = new byte[length];
-						inStreams[i].readFully(byteMessage, 0, byteMessage.length);
-
-						Message message = Message.fromBytes(byteMessage);
-						message.printMessage();
-						updateMatrix(message.log, message.id, message.tsMatrix);
-						//TODO: Do something with message, now that it's received
-						updateBlocklist(message);
-						//add partial log received to the local log of this instance
-						updateLog(message);
-					}
-
-				}
-
-
-			}
-			catch (Exception e) {
-				System.out.println(e.getMessage());
-			}
-		}
-		truncateLog();
-	}
-	
 	public void updateMatrix(ArrayList<EventRecord> clientLog, Integer clientid, ArrayList<ArrayList<Integer>> clientMatrix) {
 		for (int i = 0; i < tsMatrix.size(); i++) {
 			ArrayList<Integer> row = tsMatrix.get(id);
@@ -297,7 +253,7 @@ public class WuuInstance {
 				//sendToHost.println("Client port " + port + " connected to host " + hostPort + ".");
 				hosts[hostID] = hostSocket;
 				hosts[hostID].setKeepAlive(true);
-				outStreams[hostID] = new DataOutputStream(hosts[hostID].getOutputStream());
+				sendMessage();
 				sendMessage();
 				System.out.println("Connected self to host " + host);
 			}
@@ -333,11 +289,12 @@ public class WuuInstance {
 						TimeUnit.SECONDS.sleep(1);
 						wu.connectTo(clientSocket.getInetAddress().getHostAddress() , clientID + 7000, clientID);
 					}*/
-						BufferedReader dis = new BufferedReader(new InputStreamReader(client.getInputStream()));
+						ObjectInputStream in = new ObjectInputStream(new BufferedInputStream(client.getInputStream()));
 						System.out.println("Receiving...");
 						String line = "";
-						while((line = dis.readLine()) != null) {
-						    System.out.println(line);
+						while(true) {
+							Message m = (Message) in.readObject();
+						    m.printMessage();
 						}
 						
 							
