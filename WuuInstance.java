@@ -20,7 +20,7 @@ public class WuuInstance {
 	ArrayList<ArrayList<Integer>> tsMatrix;
 	ArrayList<EventRecord> log;
 
-	Dictionary<String, ArrayList<String>> blockList;
+	HashMap<String, ArrayList<String>> blockList;
 
 	Thread acceptThread;
 	Boolean acceptThreadActive;
@@ -39,6 +39,7 @@ public class WuuInstance {
 		acceptThreadActive = false;
 
 		log = new ArrayList<EventRecord>();
+		blockList = new HashMap<String, ArrayList<String>>();
 
 		threadPool = Executors.newCachedThreadPool();
 		listening = false;
@@ -87,6 +88,11 @@ public class WuuInstance {
 	
 	public void listen() {
 		System.out.println("Listening on port " + port);
+
+		//spawn the keyboard listening thread
+		AcceptKeyboardInput keyboardThread = new AcceptKeyboardInput(this);
+		keyboardThread.start();
+
 		try (
 			ServerSocket serverSocket = new ServerSocket(port);
 		) {					
@@ -105,12 +111,59 @@ public class WuuInstance {
 		}
 	}
 
+	public class AcceptKeyboardInput extends Thread {
+		WuuInstance wu;
+
+		public AcceptKeyboardInput(WuuInstance w) {
+			wu = w;
+		}
+
+		public void run() {
+			while(true) { //constantly accept user commands
+				Scanner sc = new Scanner(System.in);
+				String userInput = sc.nextLine();
+				String[] inputTokens = userInput.split(" ", 2);
+
+				if (inputTokens.length < 1) {
+					System.out.println("Unknown command");
+					continue;
+				}
+				if (inputTokens[0].equals("view")) {
+					view();
+					continue;
+				}
+				if (inputTokens.length < 2) {
+					System.out.println("Incomplete command");
+					continue;
+				}
+				if (inputTokens[0].equals("tweet")) {
+					EventRecord tweet = new EventRecord();
+					tweet.realtime = System.currentTimeMillis();
+					tweet.username = wu.username;
+					tweet.content = inputTokens[1];
+					id = wu.id;
+					tweet.operation = EventRecord.Operation.TWEET;
+
+					synchronized(wu){
+						wu.tsMatrix.get(wu.id).set(wu.id, tsMatrix.get(wu.id).get(wu.id) + 1);
+						tweet.timestamp = wu.tsMatrix.get(wu.id).get(wu.id);
+					
+						wu.log.add(tweet);
+					}
+				}
+			}
+		}
+	}
+
 	public void view() {
+		System.out.println("view called.  Size of log: " + log.size());
 		for (int i = 0; i < log.size(); i++) {
 			EventRecord tweet = log.get(i);
 			if (tweet.operation != EventRecord.Operation.TWEET) { continue; }
-			if (blockList.get(tweet.username).contains(username)) {
-				continue;
+			if (blockList.get(tweet.username) != null) {
+				if (blockList.get(tweet.username).contains(username)) {
+					continue;
+				}
 			}
 			System.out.println("@" + tweet.username + "\t" + tweet.realtime);
 			System.out.println(tweet.content + "\n");
@@ -159,7 +212,7 @@ public class WuuInstance {
 			if (hosts[i] == null) { continue; }
 			Message message = new Message(getLogDiff(i), tsMatrix, id);
 			
-			System.out.println("Message: ");
+			System.out.println("Message to send: ");
 			message.printMessage();
 			//byte[] byteMessage = message.toBytes();
 			try {
@@ -167,6 +220,7 @@ public class WuuInstance {
 				//s.write(byteMessage, 0, byteMessage.length);
 				ObjectOutputStream out = new ObjectOutputStream(new BufferedOutputStream(hosts[i].getOutputStream()));
 				out.writeObject(message);
+				System.out.println("Sent Message");
 			} catch (IOException e) {
 				System.out.println(e.getMessage());
 			}
